@@ -78,7 +78,7 @@ func parseFlags() (*Config, error) {
 func createTailscaleClient(cfg *Config) (*tailscale.Client, error) {
 	switch {
 	case cfg.ClientID != "" && cfg.ClientSecret != "":
-		oauthScopes := []string{"devices:read"}
+		oauthScopes := []string{"devices:core:read"}
 		client := &tailscale.Client{
 			Tailnet: "-",
 			HTTP: tailscale.OAuthConfig{
