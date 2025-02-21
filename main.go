@@ -55,15 +55,17 @@ func mainE() error {
 	}
 	policyFilename := args[0]
 
-	var clientOption tailscale.ClientOption
+	var err error
+	var client *tailscale.Client
 	if clientID != "" || clientSecret != "" {
 		oauthScopes := []string{"devices:read"}
-		clientOption = tailscale.WithOAuthClientCredentials(clientID, clientSecret, oauthScopes)
-	} else if apiKey == "" {
+		clientOption := tailscale.WithOAuthClientCredentials(clientID, clientSecret, oauthScopes)
+		client, err = tailscale.NewClient(apiKey, "-", clientOption)
+	} else if apiKey != "" {
+		client, err = tailscale.NewClient(apiKey, "-")
+	} else {
 		return fmt.Errorf("either api key or oauth credentials must be provided")
 	}
-
-	client, err := tailscale.NewClient(apiKey, "-", clientOption)
 	if err != nil {
 		return fmt.Errorf("failed to create Tailscale client: %v", err)
 	}
