@@ -1,6 +1,6 @@
 module github.com/josh/ts-acl-hosts-gen
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/tailscale/hujson v0.0.0-20241010212012-29efb4a0184b
