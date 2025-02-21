@@ -158,8 +158,13 @@ func patchPolicy(filename string, hosts map[string]string) error {
 
 func deviceShortDomain(device tailscale.Device) (string, error) {
 	parts := strings.Split(device.Name, ".")
-	if len(parts) == 4 && strings.HasPrefix(parts[1], "tail") && parts[2] == "ts" && parts[3] == "net" {
+	if len(parts) < 3 {
+		return "", fmt.Errorf("bad device name: %s", device.Name)
+	}
+
+	if parts[len(parts)-2] == "ts" && parts[len(parts)-1] == "net" {
 		return parts[0], nil
 	}
+
 	return "", fmt.Errorf("bad device name: %s", device.Name)
 }
