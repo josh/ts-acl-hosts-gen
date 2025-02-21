@@ -172,8 +172,15 @@ func patchPolicy(filename string, hosts map[string]string) error {
 		return fmt.Errorf("failed parse policy: %w", err)
 	}
 
+	var operation string
+	if value.Find("hosts") == nil {
+		operation = "add"
+	} else {
+		operation = "replace"
+	}
+
 	patchOp := JSONPatchOperation{
-		Operation: "replace",
+		Operation: operation,
 		Path:      "/hosts",
 		Value:     hosts,
 	}
