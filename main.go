@@ -14,13 +14,28 @@ import (
 	"github.com/tailscale/tailscale-client-go/tailscale"
 )
 
+var (
+	ErrInvalidDeviceName = errors.New("invalid device name: missing ts.net suffix")
+	ErrMissingPolicy     = errors.New("missing policy")
+	ErrNoCredentials     = errors.New("either api key or oauth credentials must be provided")
+)
+
+type Config struct {
+	APIKey       string
+	ClientID     string
+	ClientSecret string
+	PolicyFile   string
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: ts-acl-hosts-gen [flags] policy.hujson\n")
 	flag.PrintDefaults()
 }
 
 func main() {
-	err := mainE()
+	ctx := context.Background()
+
+	err := mainE(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		usage()
@@ -28,75 +43,86 @@ func main() {
 	}
 }
 
-func mainE() error {
-	var apiKey string
+func parseFlags() (*Config, error) {
+	cfg := &Config{}
 
-	flag.StringVar(&apiKey, "api-key", "", "Tailscale API key")
-
-	if apiKey == "" {
-		apiKey = os.Getenv("TS_API_KEY")
-	}
-
-	var clientID string
-
-	flag.StringVar(&clientID, "oauth-id", "", "Tailscale OAuth client ID")
-
-	if clientID == "" {
-		clientID = os.Getenv("TS_OAUTH_ID")
-	}
-
-	var clientSecret string
-
-	flag.StringVar(&clientSecret, "oauth-secret", "", "Tailscale OAuth client secret")
-
-	if clientSecret == "" {
-		clientSecret = os.Getenv("TS_OAUTH_SECRET")
-	}
+	flag.StringVar(&cfg.APIKey, "api-key", "", "Tailscale API key")
+	flag.StringVar(&cfg.ClientID, "oauth-id", "", "Tailscale OAuth client ID")
+	flag.StringVar(&cfg.ClientSecret, "oauth-secret", "", "Tailscale OAuth client secret")
 
 	flag.Usage = usage
 	flag.Parse()
 
-	args := flag.Args()
-	if len(args) != 1 {
-		return errors.New("missing policy")
+	if cfg.APIKey == "" {
+		cfg.APIKey = os.Getenv("TS_API_KEY")
 	}
 
-	policyFilename := args[0]
+	if cfg.ClientID == "" {
+		cfg.ClientID = os.Getenv("TS_OAUTH_ID")
+	}
+
+	if cfg.ClientSecret == "" {
+		cfg.ClientSecret = os.Getenv("TS_OAUTH_SECRET")
+	}
+
+	args := flag.Args()
+	if len(args) != 1 {
+		return nil, ErrMissingPolicy
+	}
+
+	cfg.PolicyFile = args[0]
+
+	return cfg, nil
+}
+
+func createTailscaleClient(cfg *Config) (*tailscale.Client, error) {
+	var client *tailscale.Client
 
 	var err error
 
-	var client *tailscale.Client
-
-	if clientID != "" || clientSecret != "" {
+	switch {
+	case cfg.ClientID != "" || cfg.ClientSecret != "":
 		oauthScopes := []string{"devices:read"}
-		clientOption := tailscale.WithOAuthClientCredentials(clientID, clientSecret, oauthScopes)
-		client, err = tailscale.NewClient(apiKey, "-", clientOption)
-	} else if apiKey != "" {
-		client, err = tailscale.NewClient(apiKey, "-")
-	} else {
-		return errors.New("either api key or oauth credentials must be provided")
+		clientOption := tailscale.WithOAuthClientCredentials(cfg.ClientID, cfg.ClientSecret, oauthScopes)
+		client, err = tailscale.NewClient(cfg.APIKey, "-", clientOption)
+	case cfg.APIKey != "":
+		client, err = tailscale.NewClient(cfg.APIKey, "-")
+	default:
+		return nil, ErrNoCredentials
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to create Tailscale client: %w", err)
+		return nil, fmt.Errorf("failed to create Tailscale client: %w", err)
 	}
 
-	fmt.Println("Fetching hosts...")
+	return client, nil
+}
 
-	hosts, err := fetchHosts(client)
+func mainE(ctx context.Context) error {
+	cfg, err := parseFlags()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Formatting policy...")
+	client, err := createTailscaleClient(cfg)
+	if err != nil {
+		return err
+	}
 
-	err = patchPolicy(policyFilename, hosts)
+	fmt.Fprintln(os.Stderr, "Fetching hosts...")
 
-	return err
+	hosts, err := fetchHosts(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(os.Stderr, "Formatting policy...")
+
+	return patchPolicy(cfg.PolicyFile, hosts)
 }
 
-func fetchHosts(client *tailscale.Client) (map[string]string, error) {
-	devices, err := client.Devices(context.Background())
+func fetchHosts(ctx context.Context, client *tailscale.Client) (map[string]string, error) {
+	devices, err := client.Devices(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Tailscale devices: %w", err)
 	}
@@ -127,19 +153,19 @@ func patchPolicy(filename string, hosts map[string]string) error {
 		return fmt.Errorf("file does not exist: %w", err)
 	}
 
-	f, err := os.Open(filename)
+	policyFile, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("failed read policy: %w", err)
 	}
-	defer f.Close()
+	defer policyFile.Close()
 
-	src, err := io.ReadAll(f)
+	src, err := io.ReadAll(policyFile)
 	if err != nil {
 		return fmt.Errorf("failed read policy: %w", err)
 	}
 
 	input := make([]byte, len(src))
-	_ = copy(input, src)
+	copy(input, src)
 
 	value, err := hujson.Parse(input)
 	if err != nil {
@@ -176,12 +202,12 @@ func patchPolicy(filename string, hosts map[string]string) error {
 func deviceShortDomain(device tailscale.Device) (string, error) {
 	parts := strings.Split(device.Name, ".")
 	if len(parts) < 3 {
-		return "", fmt.Errorf("bad device name: %s", device.Name)
+		return "", fmt.Errorf("%w: %q", ErrInvalidDeviceName, device.Name)
 	}
 
 	if parts[len(parts)-2] == "ts" && parts[len(parts)-1] == "net" {
 		return parts[0], nil
 	}
 
-	return "", fmt.Errorf("bad device name: %s", device.Name)
+	return "", fmt.Errorf("%w: %q", ErrInvalidDeviceName, device.Name)
 }
