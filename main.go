@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -29,19 +30,25 @@ func main() {
 
 func mainE() error {
 	var apiKey string
+
 	flag.StringVar(&apiKey, "api-key", "", "Tailscale API key")
+
 	if apiKey == "" {
 		apiKey = os.Getenv("TS_API_KEY")
 	}
 
 	var clientID string
+
 	flag.StringVar(&clientID, "oauth-id", "", "Tailscale OAuth client ID")
+
 	if clientID == "" {
 		clientID = os.Getenv("TS_OAUTH_ID")
 	}
 
 	var clientSecret string
+
 	flag.StringVar(&clientSecret, "oauth-secret", "", "Tailscale OAuth client secret")
+
 	if clientSecret == "" {
 		clientSecret = os.Getenv("TS_OAUTH_SECRET")
 	}
@@ -51,12 +58,15 @@ func mainE() error {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		return fmt.Errorf("missing policy")
+		return errors.New("missing policy")
 	}
+
 	policyFilename := args[0]
 
 	var err error
+
 	var client *tailscale.Client
+
 	if clientID != "" || clientSecret != "" {
 		oauthScopes := []string{"devices:read"}
 		clientOption := tailscale.WithOAuthClientCredentials(clientID, clientSecret, oauthScopes)
@@ -64,10 +74,11 @@ func mainE() error {
 	} else if apiKey != "" {
 		client, err = tailscale.NewClient(apiKey, "-")
 	} else {
-		return fmt.Errorf("either api key or oauth credentials must be provided")
+		return errors.New("either api key or oauth credentials must be provided")
 	}
+
 	if err != nil {
-		return fmt.Errorf("failed to create Tailscale client: %v", err)
+		return fmt.Errorf("failed to create Tailscale client: %w", err)
 	}
 
 	fmt.Println("Fetching hosts...")
@@ -78,22 +89,26 @@ func mainE() error {
 	}
 
 	fmt.Println("Formatting policy...")
+
 	err = patchPolicy(policyFilename, hosts)
+
 	return err
 }
 
 func fetchHosts(client *tailscale.Client) (map[string]string, error) {
 	devices, err := client.Devices(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch Tailscale devices: %v", err)
+		return nil, fmt.Errorf("failed to fetch Tailscale devices: %w", err)
 	}
 
 	hosts := map[string]string{}
+
 	for _, device := range devices {
 		name, err := deviceShortDomain(device)
 		if err != nil {
-			return nil, fmt.Errorf("bad host: %v", err)
+			return nil, fmt.Errorf("bad host: %w", err)
 		}
+
 		hosts[name] = device.Addresses[0]
 	}
 
@@ -109,18 +124,18 @@ type JSONPatchOperation struct {
 func patchPolicy(filename string, hosts map[string]string) error {
 	info, err := os.Stat(filename)
 	if err != nil {
-		return fmt.Errorf("file does not exist: %v", err)
+		return fmt.Errorf("file does not exist: %w", err)
 	}
 
 	f, err := os.Open(filename)
 	if err != nil {
-		return fmt.Errorf("failed read policy: %v", err)
+		return fmt.Errorf("failed read policy: %w", err)
 	}
 	defer f.Close()
 
 	src, err := io.ReadAll(f)
 	if err != nil {
-		return fmt.Errorf("failed read policy: %v", err)
+		return fmt.Errorf("failed read policy: %w", err)
 	}
 
 	input := make([]byte, len(src))
@@ -128,7 +143,7 @@ func patchPolicy(filename string, hosts map[string]string) error {
 
 	value, err := hujson.Parse(input)
 	if err != nil {
-		return fmt.Errorf("failed parse policy: %v", err)
+		return fmt.Errorf("failed parse policy: %w", err)
 	}
 
 	patchOp := JSONPatchOperation{
@@ -137,20 +152,22 @@ func patchPolicy(filename string, hosts map[string]string) error {
 		Value:     hosts,
 	}
 	patch := []JSONPatchOperation{patchOp}
+
 	patchjson, err := json.Marshal(patch)
 	if err != nil {
-		return fmt.Errorf("failed to update policy: %v", err)
+		return fmt.Errorf("failed to update policy: %w", err)
 	}
 
 	err = value.Patch(patchjson)
 	if err != nil {
-		return fmt.Errorf("failed to update policy: %v", err)
+		return fmt.Errorf("failed to update policy: %w", err)
 	}
+
 	value.Format()
 
 	err = os.WriteFile(filename, []byte(value.String()), info.Mode().Perm())
 	if err != nil {
-		return fmt.Errorf("failed to write policy: %v", err)
+		return fmt.Errorf("failed to write policy: %w", err)
 	}
 
 	return nil
