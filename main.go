@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/tailscale/hujson"
-	"github.com/tailscale/tailscale-client-go/tailscale"
+	"tailscale.com/client/tailscale/v2"
 )
 
 var (
@@ -76,26 +76,27 @@ func parseFlags() (*Config, error) {
 }
 
 func createTailscaleClient(cfg *Config) (*tailscale.Client, error) {
-	var client *tailscale.Client
-
-	var err error
-
 	switch {
-	case cfg.ClientID != "" || cfg.ClientSecret != "":
+	case cfg.ClientID != "" && cfg.ClientSecret != "":
 		oauthScopes := []string{"devices:read"}
-		clientOption := tailscale.WithOAuthClientCredentials(cfg.ClientID, cfg.ClientSecret, oauthScopes)
-		client, err = tailscale.NewClient(cfg.APIKey, "-", clientOption)
+		client := &tailscale.Client{
+			Tailnet: "-",
+			HTTP: tailscale.OAuthConfig{
+				ClientID:     cfg.ClientID,
+				ClientSecret: cfg.ClientSecret,
+				Scopes:       oauthScopes,
+			}.HTTPClient(),
+		}
+		return client, nil
 	case cfg.APIKey != "":
-		client, err = tailscale.NewClient(cfg.APIKey, "-")
+		client := &tailscale.Client{
+			Tailnet: "-",
+			APIKey:  cfg.APIKey,
+		}
+		return client, nil
 	default:
 		return nil, ErrNoCredentials
 	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Tailscale client: %w", err)
-	}
-
-	return client, nil
 }
 
 func mainE(ctx context.Context) error {
@@ -122,7 +123,7 @@ func mainE(ctx context.Context) error {
 }
 
 func fetchHosts(ctx context.Context, client *tailscale.Client) (map[string]string, error) {
-	devices, err := client.Devices(ctx)
+	devices, err := client.Devices().List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Tailscale devices: %w", err)
 	}

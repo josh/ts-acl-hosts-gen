@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/tailscale/hujson v0.0.0-20241010212012-29efb4a0184b
-	github.com/tailscale/tailscale-client-go v1.17.0
+	tailscale.com/client/tailscale/v2 v2.0.0-20250221125947-1ce94fb92f82
 )
 
-require golang.org/x/oauth2 v0.19.0 // indirect
+require golang.org/x/oauth2 v0.21.0 // indirect
