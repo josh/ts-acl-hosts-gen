@@ -147,15 +147,44 @@ type JSONPatchOperation struct {
 	Value     interface{} `json:"value"`
 }
 
-func patchPolicy(filename string, hosts map[string]string) error {
+func openPolicy(filename string) (*os.File, os.FileInfo, error) {
 	info, err := os.Stat(filename)
 	if err != nil {
-		return fmt.Errorf("file does not exist: %w", err)
+		if !os.IsNotExist(err) {
+			return nil, nil, fmt.Errorf("failed to check policy file: %w", err)
+		}
+
+		f, err := os.Create(filename)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create policy file: %w", err)
+		}
+
+		if _, err := f.WriteString("{\n}"); err != nil {
+			f.Close()
+
+			return nil, nil, fmt.Errorf("failed to write initial JSON: %w", err)
+		}
+
+		f.Close()
+
+		info, err = os.Stat(filename)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to stat new policy file: %w", err)
+		}
 	}
 
 	policyFile, err := os.Open(filename)
 	if err != nil {
-		return fmt.Errorf("failed read policy: %w", err)
+		return nil, nil, fmt.Errorf("failed read policy: %w", err)
+	}
+
+	return policyFile, info, nil
+}
+
+func patchPolicy(filename string, hosts map[string]string) error {
+	policyFile, info, err := openPolicy(filename)
+	if err != nil {
+		return err
 	}
 	defer policyFile.Close()
 
