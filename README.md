@@ -20,6 +20,6 @@ usage: ts-acl-hosts-gen [flags] policy.hujson
         Tailscale OAuth client ID
   -oauth-secret string
         Tailscale OAuth client secret
-  -V,-version
+  -V, --version
         print version and exit
 ```
