@@ -143,6 +143,10 @@ func fetchHosts(ctx context.Context, client *tailscale.Client) (map[string]strin
 	hosts := map[string]string{}
 
 	for _, device := range devices {
+		if device.IsEphemeral {
+			continue
+		}
+
 		name, err := deviceShortDomain(device)
 		if err != nil {
 			return nil, fmt.Errorf("bad host: %w", err)
