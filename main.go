@@ -22,9 +22,7 @@ var (
 
 // constants settable at build time
 var (
-    // Version is the program version. This can be overridden at build time with
-    // -ldflags "-X main.Version=...".
-    Version = "0.2.0"
+	Version = "0.2.0"
 )
 
 type Config struct {
@@ -57,7 +55,6 @@ func parseFlags() (*Config, error) {
 	flag.StringVar(&cfg.APIKey, "api-key", "", "Tailscale API key")
 	flag.StringVar(&cfg.ClientID, "oauth-id", "", "Tailscale OAuth client ID")
 	flag.StringVar(&cfg.ClientSecret, "oauth-secret", "", "Tailscale OAuth client secret")
-	flag.BoolVar(&printVersion, "V", false, "print version and exit")
 	flag.BoolVar(&printVersion, "version", false, "print version and exit")
 
 	flag.Usage = usage
