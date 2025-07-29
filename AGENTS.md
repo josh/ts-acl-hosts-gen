@@ -1,10 +1,10 @@
 # Agents Guide
 
-This project is written in Go and uses Go modules. The module's go version is 1.23, so install Go 1.23 or newer.
+This project is written in Go and uses Go modules. The module's go version is 1.24, so install Go 1.24 or newer.
 
 ## Setup
 
-1. Install Go 1.23 or later.
+1. Install Go 1.24 or later.
 2. Download dependencies with:
 
 ```sh
