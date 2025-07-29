@@ -22,7 +22,7 @@ var (
 
 // constants settable at build time
 var (
-	Version = "0.2.0"
+	Version = "0.3.0"
 )
 
 type Config struct {
