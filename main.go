@@ -20,6 +20,13 @@ var (
 	ErrNoCredentials     = errors.New("either api key or oauth credentials must be provided")
 )
 
+// constants settable at build time
+var (
+    // Version is the program version. This can be overridden at build time with
+    // -ldflags "-X main.Version=...".
+    Version = "0.2.0"
+)
+
 type Config struct {
 	APIKey       string
 	ClientID     string
@@ -45,13 +52,21 @@ func main() {
 
 func parseFlags() (*Config, error) {
 	cfg := &Config{}
+	var printVersion bool
 
 	flag.StringVar(&cfg.APIKey, "api-key", "", "Tailscale API key")
 	flag.StringVar(&cfg.ClientID, "oauth-id", "", "Tailscale OAuth client ID")
 	flag.StringVar(&cfg.ClientSecret, "oauth-secret", "", "Tailscale OAuth client secret")
+	flag.BoolVar(&printVersion, "V", false, "print version and exit")
+	flag.BoolVar(&printVersion, "version", false, "print version and exit")
 
 	flag.Usage = usage
 	flag.Parse()
+
+	if printVersion {
+		fmt.Fprintln(os.Stdout, Version)
+		os.Exit(0)
+	}
 
 	if cfg.APIKey == "" {
 		cfg.APIKey = os.Getenv("TS_API_KEY")
